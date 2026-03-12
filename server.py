@@ -508,8 +508,9 @@ class PromptServer():
                     result = resolve_hash_to_path(filename, owner_id=owner_id)
                     if result is None:
                         return web.Response(status=404)
-                    file, filename = result.abs_path, result.download_name
+                    file, filename, resolved_content_type = result.abs_path, result.download_name, result.content_type
                 else:
+                    resolved_content_type = None
                     filename, output_dir = folder_paths.annotated_filepath(filename)
 
                     if not filename:
@@ -593,8 +594,13 @@ class PromptServer():
                             return web.Response(body=alpha_buffer.read(), content_type='image/png',
                                                 headers={"Content-Disposition": f"filename=\"{filename}\""})
                     else:
-                        # Get content type from mimetype, defaulting to 'application/octet-stream'
-                        content_type = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
+                        # Use the content type from asset resolution if available,
+                        # otherwise guess from the filename.
+                        content_type = (
+                            resolved_content_type
+                            or mimetypes.guess_type(filename)[0]
+                            or 'application/octet-stream'
+                        )
 
                         # For security, force certain mimetypes to download instead of display
                         if content_type in {'text/html', 'text/html-sandboxed', 'application/xhtml+xml', 'text/javascript', 'text/css'}:
