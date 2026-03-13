@@ -18,10 +18,8 @@ from app.assets.database.queries import (
     mark_references_missing_outside_prefixes,
     reassign_asset_references,
     remove_missing_tag_for_asset_id,
-    set_reference_metadata,
     set_reference_system_metadata,
     update_asset_hash_and_mime,
-    update_is_missing_by_asset_id,
 )
 from app.assets.services.bulk_ingest import (
     SeedAssetSpec,
