@@ -118,3 +118,43 @@ class MinimaxVideoGenerationResponse(BaseModel):
     task_id: str = Field(
         ..., description='The task ID for the asynchronous video generation task.'
     )
+
+
+class MiniMaxChatModel(str, Enum):
+    M2_5 = 'MiniMax-M2.5'
+    M2_5_highspeed = 'MiniMax-M2.5-highspeed'
+
+
+class MiniMaxChatMessage(BaseModel):
+    role: str = Field(..., description='The role of the message author (system, user, or assistant).')
+    content: str = Field(..., description='The content of the message.')
+
+
+class MiniMaxChatRequest(BaseModel):
+    model: str = Field(..., description='ID of the model to use.')
+    messages: list[MiniMaxChatMessage] = Field(..., description='A list of messages comprising the conversation.')
+    max_tokens: Optional[int] = Field(None, description='The maximum number of tokens to generate.')
+    temperature: Optional[float] = Field(
+        None,
+        description='Sampling temperature. Must be between 0 (exclusive) and 1 (inclusive).',
+        gt=0.0,
+        le=1.0,
+    )
+
+
+class MiniMaxChatChoice(BaseModel):
+    index: int = Field(..., description='The index of the choice.')
+    message: MiniMaxChatMessage = Field(..., description='The generated message.')
+    finish_reason: Optional[str] = Field(None, description='The reason the model stopped generating.')
+
+
+class MiniMaxChatUsage(BaseModel):
+    prompt_tokens: int = Field(0, description='Number of tokens in the prompt.')
+    completion_tokens: int = Field(0, description='Number of tokens in the generated response.')
+    total_tokens: int = Field(0, description='Total number of tokens used.')
+
+
+class MiniMaxChatResponse(BaseModel):
+    id: Optional[str] = Field(None, description='A unique identifier for the chat completion.')
+    choices: list[MiniMaxChatChoice] = Field(..., description='A list of chat completion choices.')
+    usage: Optional[MiniMaxChatUsage] = Field(None, description='Usage statistics for the request.')
