@@ -118,3 +118,61 @@ class MinimaxVideoGenerationResponse(BaseModel):
     task_id: str = Field(
         ..., description='The task ID for the asynchronous video generation task.'
     )
+
+
+# --- Chat API models ---
+
+class MinimaxChatMessage(BaseModel):
+    role: str = Field(..., description="The role of the message author: 'user' or 'assistant'.")
+    content: str = Field(..., description="The content of the message.")
+
+
+class MinimaxChatRequest(BaseModel):
+    model: str = Field(..., description="The model ID to use for chat completion.")
+    messages: list[MinimaxChatMessage] = Field(..., description="A list of messages comprising the conversation.")
+    temperature: Optional[float] = Field(1.0, description="Sampling temperature in (0.0, 1.0]. Default is 1.0.")
+    max_tokens: Optional[int] = Field(None, description="Maximum number of tokens to generate.")
+    stream: Optional[bool] = Field(False, description="Whether to stream partial results.")
+
+
+class MinimaxChatChoice(BaseModel):
+    index: int = Field(..., description="Index of this choice.")
+    message: MinimaxChatMessage = Field(..., description="The generated message.")
+    finish_reason: Optional[str] = Field(None, description="The reason generation stopped.")
+
+
+class MinimaxChatUsage(BaseModel):
+    prompt_tokens: Optional[int] = Field(None)
+    completion_tokens: Optional[int] = Field(None)
+    total_tokens: Optional[int] = Field(None)
+
+
+class MinimaxChatResponse(BaseModel):
+    id: Optional[str] = Field(None, description="Unique identifier for this completion.")
+    choices: list[MinimaxChatChoice] = Field(..., description="List of generated choices.")
+    usage: Optional[MinimaxChatUsage] = Field(None, description="Token usage information.")
+    model: Optional[str] = Field(None, description="The model used for this completion.")
+
+
+# --- TTS API models ---
+
+class MinimaxTTSVoiceSetting(BaseModel):
+    voice_id: str = Field(..., description="The voice ID to use for speech synthesis.")
+    speed: Optional[float] = Field(1.0, description="Speech speed. 1.0 is normal.")
+    vol: Optional[float] = Field(1.0, description="Volume. 1.0 is normal.")
+    pitch: Optional[int] = Field(0, description="Pitch adjustment. 0 is normal.")
+
+
+class MinimaxTTSAudioSetting(BaseModel):
+    sample_rate: Optional[int] = Field(32000, description="Audio sample rate in Hz.")
+    bitrate: Optional[int] = Field(128000, description="Audio bitrate in bps.")
+    format: Optional[str] = Field("mp3", description="Audio format: 'mp3' or 'pcm'.")
+    channel: Optional[int] = Field(1, description="Number of audio channels.")
+
+
+class MinimaxTTSRequest(BaseModel):
+    model: str = Field(..., description="The TTS model ID to use.")
+    text: str = Field(..., description="The text to synthesize into speech.")
+    stream: Optional[bool] = Field(True, description="Whether to stream the audio output.")
+    voice_setting: MinimaxTTSVoiceSetting = Field(..., description="Voice settings.")
+    audio_setting: Optional[MinimaxTTSAudioSetting] = Field(None, description="Audio output settings.")

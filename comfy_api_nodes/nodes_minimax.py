@@ -5,18 +5,26 @@ from typing_extensions import override
 
 from comfy_api.latest import IO, ComfyExtension
 from comfy_api_nodes.apis.minimax import (
+    MinimaxChatMessage,
+    MinimaxChatRequest,
+    MinimaxChatResponse,
     MinimaxFileRetrieveResponse,
     MiniMaxModel,
     MinimaxTaskResultResponse,
+    MinimaxTTSAudioSetting,
+    MinimaxTTSRequest,
+    MinimaxTTSVoiceSetting,
     MinimaxVideoGenerationRequest,
     MinimaxVideoGenerationResponse,
     SubjectReferenceItem,
 )
 from comfy_api_nodes.util import (
     ApiEndpoint,
+    audio_bytes_to_audio_input,
     download_url_to_video_output,
     poll_op,
     sync_op,
+    sync_op_raw,
     upload_images_to_comfyapi,
     validate_string,
 )
@@ -437,6 +445,204 @@ class MinimaxHailuoVideoNode(IO.ComfyNode):
         return IO.NodeOutput(await download_url_to_video_output(file_url))
 
 
+MINIMAX_CHAT_MODELS = ["MiniMax-M2.7", "MiniMax-M2.7-highspeed"]
+
+MINIMAX_TTS_MODELS = ["speech-2.8-hd", "speech-2.8-turbo"]
+
+MINIMAX_TTS_VOICES = [
+    "English_Graceful_Lady",
+    "English_Insightful_Speaker",
+    "English_radiant_girl",
+    "English_Persuasive_Man",
+    "English_Lucky_Robot",
+    "English_expressive_narrator",
+]
+
+
+class MinimaxChatNode(IO.ComfyNode):
+    """
+    Node to generate text responses from a MiniMax chat model.
+    """
+
+    @classmethod
+    def define_schema(cls) -> IO.Schema:
+        return IO.Schema(
+            node_id="MinimaxChatNode",
+            display_name="MiniMax Chat",
+            category="api node/text/MiniMax",
+            description="Generate text responses using MiniMax chat models (M2.7 series).",
+            inputs=[
+                IO.String.Input(
+                    "prompt",
+                    multiline=True,
+                    default="",
+                    tooltip="Text prompt to send to the MiniMax chat model.",
+                ),
+                IO.Combo.Input(
+                    "model",
+                    options=MINIMAX_CHAT_MODELS,
+                    default="MiniMax-M2.7",
+                    tooltip="The MiniMax chat model to use. MiniMax-M2.7-highspeed is faster with the same performance.",
+                ),
+                IO.String.Input(
+                    "system_prompt",
+                    multiline=True,
+                    default="",
+                    optional=True,
+                    tooltip="Optional system prompt to set the behavior of the assistant.",
+                    advanced=True,
+                ),
+                IO.Int.Input(
+                    "max_tokens",
+                    default=1024,
+                    min=1,
+                    max=8192,
+                    step=1,
+                    optional=True,
+                    tooltip="Maximum number of tokens to generate.",
+                    advanced=True,
+                ),
+            ],
+            outputs=[
+                IO.String.Output(),
+            ],
+            hidden=[
+                IO.Hidden.auth_token_comfy_org,
+                IO.Hidden.api_key_comfy_org,
+                IO.Hidden.unique_id,
+            ],
+            is_api_node=True,
+            price_badge=IO.PriceBadge(
+                expr="""{"type":"text","text":"Token-based"}""",
+            ),
+        )
+
+    @classmethod
+    async def execute(
+        cls,
+        prompt: str,
+        model: str = "MiniMax-M2.7",
+        system_prompt: str = "",
+        max_tokens: int = 1024,
+    ) -> IO.NodeOutput:
+        validate_string(prompt, strip_whitespace=False)
+
+        messages: list[MinimaxChatMessage] = []
+        if system_prompt.strip():
+            messages.append(MinimaxChatMessage(role="system", content=system_prompt))
+        messages.append(MinimaxChatMessage(role="user", content=prompt))
+
+        response = await sync_op(
+            cls,
+            ApiEndpoint(path="/proxy/minimax/v1/chat/completions", method="POST"),
+            response_model=MinimaxChatResponse,
+            data=MinimaxChatRequest(
+                model=model,
+                messages=messages,
+                temperature=1.0,
+                max_tokens=max_tokens,
+                stream=False,
+            ),
+        )
+
+        if not response.choices:
+            return IO.NodeOutput("Empty response from MiniMax model.")
+        return IO.NodeOutput(response.choices[0].message.content)
+
+
+class MinimaxTextToSpeechNode(IO.ComfyNode):
+    """
+    Node to convert text to speech using MiniMax TTS API.
+    """
+
+    @classmethod
+    def define_schema(cls) -> IO.Schema:
+        return IO.Schema(
+            node_id="MinimaxTextToSpeechNode",
+            display_name="MiniMax Text to Speech",
+            category="api node/audio/MiniMax",
+            description="Convert text to speech using MiniMax TTS models.",
+            inputs=[
+                IO.String.Input(
+                    "text",
+                    multiline=True,
+                    default="",
+                    tooltip="The text to synthesize into speech.",
+                ),
+                IO.Combo.Input(
+                    "voice",
+                    options=MINIMAX_TTS_VOICES,
+                    default="English_Graceful_Lady",
+                    tooltip="The voice to use for speech synthesis.",
+                ),
+                IO.Combo.Input(
+                    "model",
+                    options=MINIMAX_TTS_MODELS,
+                    default="speech-2.8-hd",
+                    tooltip="TTS model to use. speech-2.8-hd is higher quality; speech-2.8-turbo is faster.",
+                ),
+                IO.Float.Input(
+                    "speed",
+                    default=1.0,
+                    min=0.5,
+                    max=2.0,
+                    step=0.1,
+                    display_mode=IO.NumberDisplay.slider,
+                    optional=True,
+                    tooltip="Speech speed. 1.0 is normal speed.",
+                    advanced=True,
+                ),
+            ],
+            outputs=[
+                IO.Audio.Output(),
+            ],
+            hidden=[
+                IO.Hidden.auth_token_comfy_org,
+                IO.Hidden.api_key_comfy_org,
+                IO.Hidden.unique_id,
+            ],
+            is_api_node=True,
+            price_badge=IO.PriceBadge(
+                expr="""{"type":"text","text":"Character-based"}""",
+            ),
+        )
+
+    @classmethod
+    async def execute(
+        cls,
+        text: str,
+        voice: str = "English_Graceful_Lady",
+        model: str = "speech-2.8-hd",
+        speed: float = 1.0,
+    ) -> IO.NodeOutput:
+        validate_string(text, min_length=1)
+
+        response_bytes = await sync_op_raw(
+            cls,
+            ApiEndpoint(path="/proxy/minimax/v1/t2a_v2", method="POST"),
+            data=MinimaxTTSRequest(
+                model=model,
+                text=text,
+                stream=False,
+                voice_setting=MinimaxTTSVoiceSetting(
+                    voice_id=voice,
+                    speed=speed,
+                    vol=1.0,
+                    pitch=0,
+                ),
+                audio_setting=MinimaxTTSAudioSetting(
+                    sample_rate=32000,
+                    bitrate=128000,
+                    format="mp3",
+                    channel=1,
+                ),
+            ),
+            as_binary=True,
+        )
+
+        return IO.NodeOutput(audio_bytes_to_audio_input(response_bytes))
+
+
 class MinimaxExtension(ComfyExtension):
     @override
     async def get_node_list(self) -> list[type[IO.ComfyNode]]:
@@ -445,6 +651,8 @@ class MinimaxExtension(ComfyExtension):
             MinimaxImageToVideoNode,
             # MinimaxSubjectToVideoNode,
             MinimaxHailuoVideoNode,
+            MinimaxChatNode,
+            MinimaxTextToSpeechNode,
         ]
 
 
